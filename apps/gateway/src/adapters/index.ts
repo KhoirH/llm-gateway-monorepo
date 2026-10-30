@@ -7,6 +7,6 @@ export function defaultAdapters(env: Env): Record<string, BackendAdapter> {
   return {
     fast: new OpenAICompatAdapter({ name: "fast", baseUrl: env.FAST_BASE_URL, apiKey: env.FAST_API_KEY, model: env.FAST_MODEL }),
     strong: new OpenAICompatAdapter({ name: "strong", baseUrl: env.STRONG_BASE_URL, apiKey: env.STRONG_API_KEY, model: env.STRONG_MODEL }),
-    mock: new MockAdapter(),
+    mock: new MockAdapter({ failureRate: env.MOCK_FAILURE_RATE, failMode: env.MOCK_FAIL_MODE }),
   };
 }

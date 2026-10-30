@@ -34,6 +34,10 @@ const envSchema = z.object({
   STRONG_API_KEY: z.string().default(""),
   STRONG_BASE_URL: z.string().default("https://generativelanguage.googleapis.com/v1beta/openai/"),
   STRONG_MODEL: z.string().default("gemini-2.0-flash"),
+  TTFT_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
+  TOTAL_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  MOCK_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
+  MOCK_FAIL_MODE: z.enum(["error5xx", "429", "hang", "midStream"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,0 +1,22 @@
+{
+  "name": "llm-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "gateway:dev": "npm run dev -w apps/gateway",
+    "gateway:test": "npm run test -w apps/gateway",
+    "gateway:typecheck": "npm run typecheck -w apps/gateway",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "db:migrate": "npm run db:migrate -w apps/gateway",
+    "db:seed": "npm run db:seed -w apps/gateway",
+    "db:reset": "npm run db:reset -w apps/gateway",
+    "verify:providers": "node --env-file-if-exists=.env scripts/verify-providers.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: llm-gateway
+    runtime: node
+    plan: free
+    rootDir: apps/gateway
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: FAST_API_KEY
+        sync: false
+      - key: FAST_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: FAST_MODEL
+        value: llama-3.1-8b-instant
+      - key: STRONG_API_KEY
+        sync: false
+      - key: STRONG_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: STRONG_MODEL
+        value: gemini-2.0-flash

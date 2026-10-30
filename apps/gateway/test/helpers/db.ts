@@ -25,6 +25,9 @@ export function makeTestEnv(overrides: Partial<Env> = {}): Env {
     STRONG_API_KEY: "",
     STRONG_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     STRONG_MODEL: "gemini-2.0-flash",
+    TTFT_TIMEOUT_MS: 3000,
+    TOTAL_TIMEOUT_MS: 20000,
+    MOCK_FAILURE_RATE: 0,
     ...overrides,
   };
 }

@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { estimateCost, type ModelTier } from "./config/models.js";
+import type { RouteStep } from "./routing/route.js";
 
 export interface Usage {
   inputTokens: number;
@@ -14,6 +16,7 @@ export interface MeteringParams {
   tenantId: string;
   capability: string;
   fallbackFired?: boolean;
+  routeSteps?: RouteStep[];
 }
 
 export interface MeteredOutcome {
@@ -21,15 +24,17 @@ export interface MeteredOutcome {
   usage: Usage | null;
 }
 
-export async function writeRequestRow(pool: Pool, params: MeteringParams, usage: Usage | null, outcome: string): Promise<string | null> {
+export async function writeRequestRow(pool: Pool, params: MeteringParams, usage: Usage | null, outcome: string, requestId?: string): Promise<string | null> {
+  const id = requestId ?? randomUUID();
   try {
     const cost = usage ? estimateCost(usage.modelUsed as ModelTier, usage.inputTokens, usage.outputTokens) : 0;
     const res = await pool.query<{ id: string }>(
       `INSERT INTO requests
-         (tenant_id, capability, model_used, input_tokens, output_tokens, usage_estimated, latency_ms, ttft_ms, estimated_cost, outcome, fallback_fired)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (id, tenant_id, capability, model_used, input_tokens, output_tokens, usage_estimated, latency_ms, ttft_ms, estimated_cost, outcome, fallback_fired, route_steps)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
        RETURNING id`,
       [
+        id,
         params.tenantId,
         params.capability,
         usage?.modelUsed ?? null,
@@ -41,6 +46,7 @@ export async function writeRequestRow(pool: Pool, params: MeteringParams, usage:
         cost,
         outcome,
         params.fallbackFired ?? false,
+        JSON.stringify(params.routeSteps ?? []),
       ],
     );
     return res.rows[0]?.id ?? null;

@@ -1,0 +1,434 @@
+{
+  "info": {
+    "_postman_id": "b7e1c2d3-4a5f-4c6d-8e9f-0a1b2c3d4e5f",
+    "name": "LLM Gateway",
+    "description": "Postman collection for the LLM Gateway (Approach B). Start the stack first: `npm run db:up`, `npm run db:migrate`, `npm run db:seed`, then `npm run gateway:dev`.\n\nNotes:\n- Demo API keys are regenerated every time you run `npm run db:seed`; update the collection variables `acmeKey`, `globexKey`, `chaosKey` after re-seeding.\n- `POST /v1/chat/completions` streams SSE (OpenAI-compatible chunks). Postman shows the stream progressively in the response body.\n- Seed tenants: acme (all models, quota 200k), globex (fast only, quota 500 - to demo fail-closed), chaos (for fallback demos in B3).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:3000" },
+    { "key": "acmeKey", "value": "PASTE_KEY_FROM_NPM_RUN_DB_SEED" },
+    { "key": "globexKey", "value": "PASTE_KEY_FROM_NPM_RUN_DB_SEED" },
+    { "key": "chaosKey", "value": "PASTE_KEY_FROM_NPM_RUN_DB_SEED" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/healthz"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Chat Completions (SSE)",
+      "item": [
+        {
+          "name": "Chat - mock backend (acme)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mock\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"halo gateway\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('SSE content type', () => pm.expect(pm.response.headers.get('content-type')).to.include('text/event-stream'));",
+                  "pm.test('x-model-used mock', () => pm.expect(pm.response.headers.get('x-model-used')).to.eql('mock'));",
+                  "pm.test('x-fallback-fired false', () => pm.expect(pm.response.headers.get('x-fallback-fired')).to.eql('false'));",
+                  "pm.test('x-request-id present', () => pm.expect(pm.response.headers.get('x-request-id')).to.not.be.undefined);",
+                  "pm.test('ends with [DONE]', () => pm.expect(pm.response.text()).to.include('data: [DONE]'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat - non-streaming JSON (default, no stream field)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mock\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"halo gateway\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('chat.completion object', () => pm.expect(pm.response.json().object).to.eql('chat.completion'));",
+                  "pm.test('has message content', () => pm.expect(pm.response.json().choices[0].message.content).to.not.be.undefined);",
+                  "pm.test('usage present', () => pm.expect(pm.response.json().usage).to.have.property('prompt_tokens'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat - fast / Groq (acme, needs FAST_API_KEY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"fast\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Say OK\" }\n  ],\n  \"max_tokens\": 20\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Chat - strong / Gemini (acme, needs GEMINI_API_KEY)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"strong\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Say OK\" }\n  ],\n  \"max_tokens\": 20\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Chat - default model (acme, no model field)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"who answers?\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Chat - abort stream (abort after 300ms)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mock\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"abort me\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "setTimeout(() => pm.execution.abortRequest?.(), 300);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error cases",
+      "item": [
+        {
+          "name": "401 - missing Authorization header",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"hi\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('code invalid_api_key', () => pm.expect(pm.response.json().error.code).to.eql('invalid_api_key'));",
+                  "pm.test('has request_id', () => pm.expect(pm.response.json().error.request_id).to.not.be.undefined);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 - unknown key",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer sk-gw-notreal" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"hi\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('code invalid_api_key', () => pm.expect(pm.response.json().error.code).to.eql('invalid_api_key'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 - model not allowed (globex asks strong)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{globexKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"strong\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"hi\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403', () => pm.response.to.have.status(403));",
+                  "pm.test('code model_not_allowed', () => pm.expect(pm.response.json().error.code).to.eql('model_not_allowed'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "429 - quota exhausted (globex, max_tokens 1000 > quota 500)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{globexKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"fast\",\n  \"max_tokens\": 1000,\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"hi\" }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('429', () => pm.response.to.have.status(429));",
+                  "pm.test('code quota_exhausted', () => pm.expect(pm.response.json().error.code).to.eql('quota_exhausted'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - invalid body (empty messages)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('code invalid_request', () => pm.expect(pm.response.json().error.code).to.eql('invalid_request'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 - malformed JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{not valid json"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400', () => pm.response.to.have.status(400));",
+                  "pm.test('code invalid_request', () => pm.expect(pm.response.json().error.code).to.eql('invalid_request'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "404 - unknown route",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/nope"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));",
+                  "pm.test('code not_found', () => pm.expect(pm.response.json().error.code).to.eql('not_found'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Usage",
+      "item": [
+        {
+          "name": "GET /v1/usage (acme)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{acmeKey}}" }
+            ],
+            "url": "{{baseUrl}}/v1/usage"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('tenant acme', () => pm.expect(pm.response.json().tenant_id).to.eql('acme'));",
+                  "pm.test('quota fields', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.quota).to.have.property('daily_token_quota');",
+                  "  pm.expect(b.quota).to.have.property('tokens_used');",
+                  "  pm.expect(b.quota).to.have.property('remaining');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/usage (globex)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{globexKey}}" }
+            ],
+            "url": "{{baseUrl}}/v1/usage"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('tenant globex', () => pm.expect(pm.response.json().tenant_id).to.eql('globex'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /v1/usage - 401 no key",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/usage"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('code invalid_api_key', () => pm.expect(pm.response.json().error.code).to.eql('invalid_api_key'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

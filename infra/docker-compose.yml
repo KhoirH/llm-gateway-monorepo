@@ -29,7 +29,7 @@ services:
       dockerfile: infra/pytools.Dockerfile
     profiles: ["tools"]
     env_file:
-      - ../../.env
+      - ../.env
     environment:
       DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
     depends_on:
@@ -45,7 +45,7 @@ services:
       dockerfile: infra/pytools.Dockerfile
     profiles: ["tools"]
     env_file:
-      - ../../.env
+      - ../.env
     environment:
       DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
     depends_on:

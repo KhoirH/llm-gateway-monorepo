@@ -6,6 +6,7 @@
     "apps/*"
   ],
   "scripts": {
+    "console:dev": "npm run dev -w apps/console",
     "gateway:dev": "npm run dev -w apps/gateway",
     "gateway:test": "npm run test -w apps/gateway",
     "gateway:typecheck": "npm run typecheck -w apps/gateway",

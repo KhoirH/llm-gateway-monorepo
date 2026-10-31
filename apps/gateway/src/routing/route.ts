@@ -1,10 +1,13 @@
 import { Errors } from "../errors.js";
+import { SUPPORT_FAST_MAX_INPUT_TOKENS, SUPPORT_FAST_SIMILARITY } from "../config/support.js";
 
 export interface RouteInput {
   tenantId: string;
   allowedModels: string[];
   requestedModel?: string;
   capability: "chat" | "support";
+  retrievalTopSimilarity?: number;
+  inputTokens?: number;
 }
 
 export interface RouteStep {
@@ -36,11 +39,23 @@ export function route(input: RouteInput, cfg: RoutingConfig = DEFAULT_ROUTING_CO
   if (input.requestedModel && !allowed.includes(input.requestedModel)) {
     throw Errors.modelNotAllowed(`Model '${input.requestedModel}' is not allowed for this tenant`);
   }
-  const primary = input.requestedModel ?? allowed[0];
+  const primary =
+    input.requestedModel ??
+    (input.capability === "support"
+      ? (input.retrievalTopSimilarity ?? 0) >= SUPPORT_FAST_SIMILARITY && (input.inputTokens ?? 0) < SUPPORT_FAST_MAX_INPUT_TOKENS
+        ? "fast"
+        : "strong"
+      : allowed[0]);
   steps.push({
     rule: "tenant_policy",
     detail: `allowed=[${allowed.join(",")}] requested=${input.requestedModel ?? "(default)"} -> primary=${primary}`,
   });
+  if (input.capability === "support" && !input.requestedModel) {
+    steps.push({
+      rule: "tier_selection",
+      detail: `top1=${(input.retrievalTopSimilarity ?? 0).toFixed(3)} input_tokens=${input.inputTokens ?? 0} -> ${primary}`,
+    });
+  }
 
   const chain: string[] = [primary];
   if (cfg.chaosTenantIds.includes(input.tenantId) && primary !== "mock") {

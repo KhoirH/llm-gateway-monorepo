@@ -3,5 +3,8 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" },
+    { "source": "/v1/:path*", "destination": "https://llm-gateway-monorepo-ntfy.vercel.app/v1/:path*" }
+  ]
 }

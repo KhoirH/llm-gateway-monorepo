@@ -6,6 +6,7 @@ export interface OpenAICompatOptions {
   baseUrl: string;
   apiKey: string;
   model: string;
+  embedDim?: number;
   client?: OpenAI;
 }
 
@@ -26,11 +27,13 @@ export function normalizeSdkError(err: unknown): AdapterError {
 export class OpenAICompatAdapter implements BackendAdapter {
   name: string;
   private model: string;
+  private embedDim?: number;
   private client: OpenAI;
 
   constructor(opts: OpenAICompatOptions) {
     this.name = opts.name;
     this.model = opts.model;
+    this.embedDim = opts.embedDim;
     this.client =
       opts.client ??
       new OpenAI({
@@ -39,6 +42,22 @@ export class OpenAICompatAdapter implements BackendAdapter {
         maxRetries: 0,
         timeout: 20_000,
       });
+  }
+
+  async embed(texts: string[]): Promise<number[][]> {
+    try {
+      const res = await this.client.embeddings.create(
+        {
+          model: this.model,
+          input: texts,
+          ...(this.embedDim !== undefined ? { dimensions: this.embedDim } : {}),
+        },
+        { signal: AbortSignal.timeout(60_000) },
+      );
+      return res.data.map((d) => d.embedding);
+    } catch (err) {
+      throw normalizeSdkError(err);
+    }
   }
 
   async *stream(req: ChatRequest, opts: StreamOptions): AsyncIterable<StreamChunk> {

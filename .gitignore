@@ -4,4 +4,6 @@ coverage/
 *.log
 .env
 .DS_Store
+data/embeddings-cache.json
 not-see/
+

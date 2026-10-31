@@ -38,6 +38,10 @@ const envSchema = z.object({
   TOTAL_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   MOCK_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
   MOCK_FAIL_MODE: z.enum(["error5xx", "429", "hang", "midStream"]).optional(),
+  EMBED_BASE_URL: z.string().optional(),
+  EMBED_API_KEY: z.string().optional(),
+  EMBED_MODEL: z.string().default("text-embedding-004"),
+  EMBED_DIM: z.coerce.number().int().positive().default(768),
 });
 
 export type Env = z.infer<typeof envSchema>;

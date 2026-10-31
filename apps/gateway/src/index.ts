@@ -8,6 +8,7 @@ import { healthRoutes } from "./routes/health.js";
 import { usageRoutes } from "./routes/usage.js";
 import { chatRoutes } from "./routes/chat.js";
 import { requestRoutes } from "./routes/requests.js";
+import { supportRoutes } from "./routes/support.js";
 import { defaultAdapters } from "./adapters/index.js";
 import type { BackendAdapter } from "./adapters/types.js";
 
@@ -30,6 +31,7 @@ export function buildApp(
   app.register((instance) => usageRoutes(instance, pool));
   app.register((instance) => requestRoutes(instance, pool));
   app.register((instance) => chatRoutes(instance, pool, adapters, env));
+  app.register((instance) => supportRoutes(instance, pool, adapters, env));
 
   return app;
 }

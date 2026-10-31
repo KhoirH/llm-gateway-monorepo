@@ -1,6 +1,6 @@
 # Console Guide — how to run, use, and troubleshoot
 
-The console is a small React app (`apps/console`) that drives the gateway's support assistant: streaming playground, retrieval panel, decision trail (trace), and usage/quota view.
+The playground is a **continuous chat**: every turn (question + streaming answer) stays in the transcript with its own badges, stats and decision trail; retrieval entries and the trail are collapsible per turn. "Clear" resets the session view (server-side each request is still stateless — retrieval runs per message).
 
 ## 1. Prerequisites (once)
 

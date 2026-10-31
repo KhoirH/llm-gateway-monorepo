@@ -118,6 +118,67 @@ export async function streamSupport(
   }
 }
 
+export interface ChatUsageChunk {
+  id: string;
+  object: string;
+  model: string;
+  choices: { index: number; delta: { content?: string; reasoning_content?: string }; finish_reason: string | null }[];
+  usage?: { prompt_tokens: number; completion_tokens: number; usage_estimated: boolean };
+}
+
+export async function streamChat(
+  apiKey: string,
+  messages: { role: string; content: string }[],
+  onDelta: (text: string) => void,
+  onUsage: (usage: { input_tokens: number; output_tokens: number; usage_estimated: boolean }) => void,
+  onRequestMeta: (requestId: string, model: string, fallbackFired: boolean) => void,
+): Promise<void> {
+  const res = await fetch("/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ messages, stream: true }),
+  });
+  const requestId = res.headers.get("x-request-id");
+  const modelUsed = res.headers.get("x-model-used");
+  const fallbackFired = res.headers.get("x-fallback-fired") === "true";
+  if (!res.ok || !res.body) {
+    throw await errorFrom(res);
+  }
+  if (requestId) onRequestMeta(requestId, modelUsed ?? "?", fallbackFired);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const block = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      for (const line of block.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        let parsed: ChatUsageChunk;
+        try {
+          parsed = JSON.parse(data) as ChatUsageChunk;
+        } catch {
+          continue;
+        }
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) onDelta(content);
+        if (parsed.usage) {
+          onUsage({
+            input_tokens: parsed.usage.prompt_tokens,
+            output_tokens: parsed.usage.completion_tokens,
+            usage_estimated: parsed.usage.usage_estimated,
+          });
+        }
+      }
+    }
+  }
+}
+
 export async function getUsage(apiKey: string): Promise<Usage> {
   const res = await fetch("/v1/usage", { headers: { authorization: `Bearer ${apiKey}` } });
   if (!res.ok) throw await errorFrom(res);

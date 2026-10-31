@@ -14,6 +14,9 @@
     "db:migrate": "npm run db:migrate -w apps/gateway",
     "db:seed": "npm run db:seed -w apps/gateway",
     "db:reset": "npm run db:reset -w apps/gateway",
+    "dataset:build": "docker compose -f infra/docker-compose.yml run --rm dataset",
+    "kb:build": "docker compose -f infra/docker-compose.yml run --rm kb-build",
+    "retrieval:try": "docker compose -f infra/docker-compose.yml run --rm retrieval-try",
     "verify:providers": "node --env-file-if-exists=.env scripts/verify-providers.mjs"
   },
   "engines": {

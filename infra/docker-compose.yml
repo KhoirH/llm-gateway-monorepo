@@ -15,5 +15,43 @@ services:
       timeout: 3s
       retries: 10
 
+  dataset:
+    build:
+      context: ..
+      dockerfile: infra/dataset.Dockerfile
+    profiles: ["tools"]
+    volumes:
+      - ../data:/data
+
+  kb-build:
+    build:
+      context: ..
+      dockerfile: infra/pytools.Dockerfile
+    profiles: ["tools"]
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../data:/data
+    command: python /app/build_kb.py /data
+
+  retrieval-try:
+    build:
+      context: ..
+      dockerfile: infra/pytools.Dockerfile
+    profiles: ["tools"]
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python /app/try_retrieval.py
+
 volumes:
   pgdata:

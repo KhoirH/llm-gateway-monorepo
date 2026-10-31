@@ -40,7 +40,7 @@ const envSchema = z.object({
   MOCK_FAIL_MODE: z.enum(["error5xx", "429", "hang", "midStream"]).optional(),
   EMBED_BASE_URL: z.string().optional(),
   EMBED_API_KEY: z.string().optional(),
-  EMBED_MODEL: z.string().default("text-embedding-004"),
+  EMBED_MODEL: z.string().default("gemini-embedding-001"),
   EMBED_DIM: z.coerce.number().int().positive().default(768),
 });
 

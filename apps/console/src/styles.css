@@ -1,0 +1,329 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0f1117;
+  color: #e6e8ee;
+}
+
+.app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings input {
+  width: 280px;
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  color: #e6e8ee;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.key-state {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.key-state.ok {
+  background: #12351f;
+  color: #6ee7a0;
+}
+
+.key-state.missing {
+  background: #3a1d1d;
+  color: #ff9a9a;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.tabs button {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  color: #e6e8ee;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: #24314f;
+  border-color: #3f5a91;
+}
+
+.composer {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.composer textarea {
+  flex: 1;
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  color: #e6e8ee;
+  padding: 10px;
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.composer button {
+  background: #2b62d9;
+  border: none;
+  color: white;
+  padding: 0 18px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.badges {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #2a2f3d;
+}
+
+.badge.model {
+  background: #1d2740;
+}
+
+.badge.fallback-on {
+  background: #3a2d12;
+  color: #ffc46e;
+  border-color: #6e5420;
+}
+
+.badge.fallback-off {
+  background: #12351f;
+  color: #6ee7a0;
+}
+
+.error {
+  background: #3a1d1d;
+  color: #ff9a9a;
+  border: 1px solid #6e2c2c;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.refusal {
+  background: #3a2d12;
+  color: #ffc46e;
+  border: 1px solid #6e5420;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.answer {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 6px;
+  padding: 14px;
+  min-height: 90px;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.stat {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.stat label {
+  display: block;
+  color: #8b93a7;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.entries,
+.trace {
+  margin-top: 16px;
+}
+
+.entries h3,
+.trace h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.entry {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.entry p {
+  margin: 4px 0 0;
+  color: #c3c9d6;
+}
+
+.entry-intent {
+  color: #7ea6ff;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.entry-sim {
+  float: right;
+  color: #8b93a7;
+  font-size: 11px;
+}
+
+.step,
+.attempt {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+
+.outcome-ok {
+  color: #6ee7a0;
+}
+
+.outcome-error,
+.outcome-bad_output {
+  color: #ff9a9a;
+}
+
+.outcome-partial_failure {
+  color: #ffc46e;
+}
+
+.usage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.usage-header h2 {
+  font-size: 16px;
+}
+
+.usage-header button {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  color: #e6e8ee;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cards {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.card {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 6px;
+  padding: 12px 16px;
+  min-width: 140px;
+}
+
+.card label {
+  display: block;
+  color: #8b93a7;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.card strong {
+  font-size: 18px;
+}
+
+.quota label {
+  font-size: 12px;
+  color: #8b93a7;
+}
+
+.quota-bar {
+  height: 10px;
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.quota-fill {
+  height: 100%;
+  background: #2b62d9;
+}
+
+.quota-fill.danger {
+  background: #d94b2b;
+}

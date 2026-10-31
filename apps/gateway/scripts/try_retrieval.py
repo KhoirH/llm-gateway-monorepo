@@ -1,9 +1,7 @@
-import json
 import os
-import sys
-import urllib.request
 
 import psycopg2
+from openai import OpenAI
 
 QUERIES = [
     "how do I reset my password",
@@ -19,37 +17,23 @@ QUERIES = [
 ]
 
 
-def embed_one(cfg, text):
-    body = json.dumps({"model": cfg["model"], "input": [text], "dimensions": cfg["dim"]}).encode("utf-8")
-    req = urllib.request.Request(
-        cfg["base_url"].rstrip("/") + "/embeddings",
-        data=body,
-        headers={"content-type": "application/json", "authorization": f"Bearer {cfg['api_key']}"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=60) as res:
-        payload = json.load(res)
-    return payload["data"][0]["embedding"]
-
-
 def main():
-    cfg = {
-        "base_url": os.environ.get("EMBED_BASE_URL", "").strip(),
-        "api_key": os.environ.get("EMBED_API_KEY", "").strip(),
-        "model": os.environ.get("EMBED_MODEL", "").strip(),
-        "dim": int(os.environ.get("EMBED_DIM", "768")),
-    }
-    if not cfg["base_url"] or not cfg["api_key"] or not cfg["model"]:
+    base_url = os.environ.get("EMBED_BASE_URL", "").strip()
+    api_key = os.environ.get("EMBED_API_KEY", "").strip()
+    model = os.environ.get("EMBED_MODEL", "").strip()
+    dim = int(os.environ.get("EMBED_DIM", "768"))
+    if not base_url or not api_key or not model:
         raise SystemExit("EMBED_BASE_URL, EMBED_API_KEY and EMBED_MODEL must be set (see .env.example)")
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
         raise SystemExit("DATABASE_URL must be set")
 
+    client = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=5)
     conn = psycopg2.connect(database_url)
     try:
         with conn.cursor() as cur:
             for q in QUERIES:
-                vec = embed_one(cfg, q)
+                vec = client.embeddings.create(model=model, input=[q], dimensions=dim).data[0].embedding
                 literal = "[" + ",".join(repr(x) for x in vec) + "]"
                 cur.execute(
                     "SELECT question, answer, intent, 1 - (embedding <=> %s::vector) AS similarity "

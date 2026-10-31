@@ -3,77 +3,32 @@ import json
 import os
 import sys
 import time
-import urllib.error
-import urllib.request
 
 import psycopg2
+from openai import OpenAI
 
-BATCH_SIZE = 32
-RETRIES = 4
-
-
-def embed_request(base_url, api_key, model, dim, texts):
-    body = json.dumps({"model": model, "input": texts, "dimensions": dim}).encode("utf-8")
-    req = urllib.request.Request(
-        base_url.rstrip("/") + "/embeddings",
-        data=body,
-        headers={"content-type": "application/json", "authorization": f"Bearer {api_key}"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=60) as res:
-        payload = json.load(res)
-    data = payload.get("data") or []
-    vectors = [d.get("embedding") for d in data]
-    if len(vectors) != len(texts) or any(v is None for v in vectors):
-        raise RuntimeError(f"embedding count mismatch: got {len(vectors)}, expected {len(texts)}")
-    for v in vectors:
-        if len(v) != dim:
-            raise RuntimeError(f"embedding dimension mismatch: got {len(v)}, expected {dim}. Adjust EMBED_DIM.")
-    return vectors
-
-
-def embed_with_backoff(cfg, texts):
-    last_err = None
-    for attempt in range(1, RETRIES + 1):
-        try:
-            return embed_request(cfg["base_url"], cfg["api_key"], cfg["model"], cfg["dim"], texts)
-        except urllib.error.HTTPError as e:
-            last_err = e
-            retryable = e.code == 429 or e.code >= 500
-            if not retryable or attempt == RETRIES:
-                raise
-            delay = 1.5 * (2 ** (attempt - 1))
-            print(f"embed attempt {attempt} failed (http {e.code}); retrying in {delay:.0f}s", flush=True)
-            time.sleep(delay)
-        except (urllib.error.URLError, TimeoutError, ConnectionError, RuntimeError) as e:
-            last_err = e
-            if attempt == RETRIES:
-                raise
-            delay = 1.5 * (2 ** (attempt - 1))
-            print(f"embed attempt {attempt} failed ({e}); retrying in {delay:.0f}s", flush=True)
-            time.sleep(delay)
-    raise last_err
+BATCH_SIZE = 64
+BATCH_DELAY_S = 6
 
 
 def main():
     data_dir = sys.argv[1] if len(sys.argv) > 1 else "/data"
 
-    cfg = {
-        "base_url": os.environ.get("EMBED_BASE_URL", "").strip(),
-        "api_key": os.environ.get("EMBED_API_KEY", "").strip(),
-        "model": os.environ.get("EMBED_MODEL", "").strip(),
-        "dim": int(os.environ.get("EMBED_DIM", "768")),
-    }
-    if not cfg["base_url"] or not cfg["api_key"] or not cfg["model"]:
+    base_url = os.environ.get("EMBED_BASE_URL", "").strip()
+    api_key = os.environ.get("EMBED_API_KEY", "").strip()
+    model = os.environ.get("EMBED_MODEL", "").strip()
+    dim = int(os.environ.get("EMBED_DIM", "768"))
+    if not base_url or not api_key or not model:
         raise SystemExit("EMBED_BASE_URL, EMBED_API_KEY and EMBED_MODEL must be set (see .env.example)")
-
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
         raise SystemExit("DATABASE_URL must be set")
 
+    client = OpenAI(base_url=base_url, api_key=api_key, timeout=60.0, max_retries=5)
+
     with open(os.path.join(data_dir, "kb.json"), encoding="utf-8") as f:
         entries = json.load(f)["entries"]
-    print(f"KB entries: {len(entries)}; embed model={cfg['model']} dim={cfg['dim']}", flush=True)
+    print(f"KB entries: {len(entries)}; embed model={model} dim={dim}", flush=True)
 
     cache_path = os.path.join(data_dir, "embeddings-cache.json")
     cache = {}
@@ -82,7 +37,17 @@ def main():
             cache = json.load(f)
 
     def cache_key(text):
-        return hashlib.sha256(f"{cfg['model']}:{cfg['dim']}:{text}".encode("utf-8")).hexdigest()
+        return hashlib.sha256(f"{model}:{dim}:{text}".encode("utf-8")).hexdigest()
+
+    def embed(texts):
+        res = client.embeddings.create(model=model, input=texts, dimensions=dim)
+        vectors = [d.embedding for d in res.data]
+        if len(vectors) != len(texts):
+            raise RuntimeError(f"embedding count mismatch: got {len(vectors)}, expected {len(texts)}")
+        for v in vectors:
+            if len(v) != dim:
+                raise RuntimeError(f"embedding dimension mismatch: got {len(v)}, expected {dim}. Adjust EMBED_DIM.")
+        return vectors
 
     conn = psycopg2.connect(database_url)
     try:
@@ -104,11 +69,12 @@ def main():
                 else:
                     missing.append((j, e["question"]))
             if missing:
-                embeddings = embed_with_backoff(cfg, [m[1] for m in missing])
+                embeddings = embed([m[1] for m in missing])
                 api_calls += 1
                 for (j, text), vec in zip(missing, embeddings):
                     vectors[j] = vec
                     cache[cache_key(text)] = vec
+                time.sleep(BATCH_DELAY_S)
             with conn:
                 with conn.cursor() as cur:
                     for e, vec in zip(batch, vectors):

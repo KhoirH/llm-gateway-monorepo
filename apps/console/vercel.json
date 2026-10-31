@@ -4,7 +4,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" },
-    { "source": "/v1/:path*", "destination": "https://llm-gateway-monorepo-ntfy.vercel.app/v1/:path*" }
+    { "source": "/v1/:path*", "destination": "https://llm-gateway-monorepo-ntfy.vercel.app/v1/:path*" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }

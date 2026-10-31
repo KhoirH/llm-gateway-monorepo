@@ -11,6 +11,7 @@ import { route, type RouteStep } from "../routing/route.js";
 import { estimateCost, type ModelTier } from "../config/models.js";
 import { ChunkParser } from "../support/parser.js";
 import { computeConfidence } from "../support/confidence.js";
+import { buildPrompt, buildRepairSuffix } from "../support/prompts.js";
 import {
   CONFIDENCE_THRESHOLD,
   REFUSAL_MESSAGE,
@@ -25,22 +26,8 @@ const supportBodySchema = z.object({
   model: z.string().min(1).optional(),
 });
 
-function buildPrompt(message: string, entries: RetrievedEntry[], repair: boolean): string {
-  const kb = entries.map((e, i) => `${i + 1}. [${e.intent}] Q: ${e.question}\n   A: ${e.answer}`).join("\n");
-  const intentList = [...new Set(entries.map((e) => e.intent))].join(", ");
-  const base =
-    "You are a customer support assistant. Answer the customer using the knowledge base entries.\n\n" +
-    `Knowledge base entries:\n${kb}\n\n` +
-    `Customer message: ${message}\n\n` +
-    "Respond in EXACTLY this format (first line JSON, then a line containing only ---, then the answer):\n" +
-    '{"intent": "<intent>", "confidence": <number between 0.0 and 1.0>}\n' +
-    "---\n" +
-    "<answer>\n" +
-    `Valid intents: ${intentList}`;
-  return repair
-    ? base +
-        "\n\nYour previous response did not follow the required format. Respond again in EXACTLY the required format, starting with the JSON header line."
-    : base;
+function buildFullPrompt(message: string, entries: RetrievedEntry[], repair: boolean, promptVersion: "v1" | "v2"): string {
+  return repair ? buildPrompt(message, entries, promptVersion) + buildRepairSuffix() : buildPrompt(message, entries, promptVersion);
 }
 
 function mapAdapterError(err: unknown): { status: number; code: string; message: string } {
@@ -110,11 +97,14 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
     const { chain, steps } = route({
       tenantId: auth.tenantId,
       allowedModels: auth.allowedModels,
-      requestedModel: body.model,
+      requestedModel: env.SUPPORT_MODEL_OVERRIDE ?? body.model,
       capability: "support",
       retrievalTopSimilarity: entries[0]?.similarity ?? 0,
       inputTokens,
     });
+    if (env.SUPPORT_MODEL_OVERRIDE) {
+      steps.push({ rule: "model_override", detail: `SUPPORT_MODEL_OVERRIDE=${env.SUPPORT_MODEL_OVERRIDE} (eval configuration)` });
+    }
     if (chain.some((t) => !adapters[t])) {
       await reconcileQuota(pool, auth.tenantId, estimate, 0);
       await writeRequestRow(pool, { tenantId: auth.tenantId, capability: "support", routeSteps: steps }, null, "error", req.id);
@@ -254,7 +244,7 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
           let lowConfidence = false;
 
           try {
-            for await (const chunk of adapter.stream(chatReqFor(buildPrompt(body.message, entries, repair)), {
+            for await (const chunk of adapter.stream(chatReqFor(buildFullPrompt(body.message, entries, repair, env.SUPPORT_PROMPT_VERSION)), {
               signal: attemptController.signal,
             })) {
               if (chunk.kind === "usage") {

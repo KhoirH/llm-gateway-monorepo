@@ -42,6 +42,8 @@ const envSchema = z.object({
   EMBED_API_KEY: z.string().optional(),
   EMBED_MODEL: z.string().default("gemini-embedding-001"),
   EMBED_DIM: z.coerce.number().int().positive().default(768),
+  SUPPORT_PROMPT_VERSION: z.enum(["v1", "v2"]).default("v1"),
+  SUPPORT_MODEL_OVERRIDE: z.enum(["fast", "strong"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

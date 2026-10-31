@@ -53,5 +53,57 @@ services:
         condition: service_healthy
     command: python /app/try_retrieval.py
 
+  gateway-a:
+    build:
+      context: ..
+      dockerfile: infra/gateway.Dockerfile
+    profiles: ["tools"]
+    env_file:
+      - ../.env
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
+      SUPPORT_PROMPT_VERSION: v1
+      SUPPORT_MODEL_OVERRIDE: fast
+    depends_on:
+      db:
+        condition: service_healthy
+
+  gateway-b:
+    build:
+      context: ..
+      dockerfile: infra/gateway.Dockerfile
+    profiles: ["tools"]
+    env_file:
+      - ../.env
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
+      SUPPORT_PROMPT_VERSION: v2
+      SUPPORT_MODEL_OVERRIDE: strong
+    depends_on:
+      db:
+        condition: service_healthy
+
+  eval:
+    build:
+      context: ..
+      dockerfile: infra/pytools.Dockerfile
+    profiles: ["tools"]
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgres://gateway:gateway@db:5432/gateway
+      GATEWAY_A_URL: http://gateway-a:3000
+      GATEWAY_B_URL: http://gateway-b:3000
+    depends_on:
+      - gateway-a
+      - gateway-b
+    volumes:
+      - ../data:/data:ro
+      - ../docs:/out
+    command: python /app/run_eval.py /data /out/eval-results
+
 volumes:
   pgdata:
+

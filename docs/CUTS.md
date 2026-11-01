@@ -10,7 +10,7 @@ Scope cuts declared up front (AGENT.md) and honoured:
 - **LLM-as-judge** — not used; answer quality is embedding cosine only.
 - **CI** — not set up; tests run locally via `npm run gateway:test` (85 tests).
 - **Capability filter and budget guard routing rules** — future work (listed in AGENT.md as such).
-- **Console chat playground** — the console playground uses the support capability only; the chat endpoint is exercised via tests/Postman. Cut during B6 to keep the console at assessment scope.
+- **Console chat playground** — cut during B6 to keep the console at assessment scope; **reversed 2026-11-01**: the playground now has two sub-tabs (Chat Completions on `POST /v1/chat/completions` with streaming/stop/usage/trace, and the original Support KB mode).
 
 Deviations from AGENT.md made during the build (each approved by Hilmi in-session):
 

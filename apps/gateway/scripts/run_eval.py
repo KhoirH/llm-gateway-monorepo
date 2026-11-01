@@ -4,6 +4,7 @@ import os
 import statistics
 import sys
 import time
+import urllib.error
 import urllib.request
 
 from openai import OpenAI
@@ -22,10 +23,22 @@ def sse_request(url, api_key, message):
     )
     started = time.monotonic()
     events = []
-    with urllib.request.urlopen(req, timeout=120) as res:
-        event = "message"
-        data = ""
-        raw = res.read().decode("utf-8", "replace")
+    event = "message"
+    data = ""
+    raw = ""
+    http_code = None
+    try:
+        with urllib.request.urlopen(req, timeout=120) as res:
+            http_code = res.status
+            raw = res.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        http_code = e.code
+        try:
+            raw = e.read().decode("utf-8", "replace")
+        except Exception:
+            raw = ""
+    except (urllib.error.URLError, TimeoutError, OSError):
+        http_code = 0
     wall_ms = int((time.monotonic() - started) * 1000)
     for line in raw.split("\n"):
         if line.startswith("event:"):
@@ -44,7 +57,7 @@ def sse_request(url, api_key, message):
             events.append({"event": event, "data": json.loads(data)})
         except json.JSONDecodeError:
             pass
-    return events, wall_ms
+    return events, wall_ms, http_code
 
 
 def cosine(a, b):
@@ -71,10 +84,18 @@ def percentile(values, p):
 def run_config(label, gateway_url, api_key, in_scope_cases, oos_cases, embed_client, model, dim):
     results = []
     for case, is_oos in [(c, False) for c in in_scope_cases] + [(c, True) for c in oos_cases]:
-        events, wall_ms = sse_request(gateway_url, api_key, case["question"])
+        events, wall_ms, http_code = sse_request(gateway_url, api_key, case["question"])
         final = next((e["data"] for e in events if e["event"] == "final"), None)
         error = next((e["data"] for e in events if e["event"] == "error"), None)
         meta = next((e["data"] for e in events if e["event"] == "meta"), None)
+        if error:
+            error_code = error.get("code")
+        elif http_code == 0:
+            error_code = "conn_failed"
+        elif http_code and http_code != 200:
+            error_code = f"http_{http_code}"
+        else:
+            error_code = None
         entry = {
             "question": case["question"],
             "expected_intent": None if is_oos else case.get("intent"),
@@ -90,7 +111,8 @@ def run_config(label, gateway_url, api_key, in_scope_cases, oos_cases, embed_cli
             "estimated_cost": (final.get("usage") or {}).get("estimated_cost") if final else None,
             "latency_ms": final.get("latency_ms") if final else wall_ms,
             "wall_ms": wall_ms,
-            "error": error.get("code") if error else None,
+            "error": error_code,
+            "error_message": (error.get("message") if error else None),
         }
         results.append(entry)
         status = "refused" if entry["refused"] else (entry["error"] or (entry["predicted_intent"] or "?"))
@@ -149,6 +171,7 @@ def run_config(label, gateway_url, api_key, in_scope_cases, oos_cases, embed_cli
         "total_estimated_cost": round(total_cost, 6),
         "estimated_cost_per_100_requests": round(total_cost / len(results) * 100, 6) if results else 0,
         "fallback_fired_count": sum(1 for r in results if r["fallback_fired"]),
+        "error_count": sum(1 for r in results if r["error"] and not r["refused"]),
         "results": results,
     }
 
@@ -200,6 +223,7 @@ def main():
         f"| Tokens total (in / out) | {config_a['total_input_tokens']} / {config_a['total_output_tokens']} | {config_b['total_input_tokens']} / {config_b['total_output_tokens']} |",
         f"| Estimated cost per 100 requests | ${config_a['estimated_cost_per_100_requests']:.4f} | ${config_b['estimated_cost_per_100_requests']:.4f} |",
         f"| Fallback fired | {config_a['fallback_fired_count']}x | {config_b['fallback_fired_count']}x |",
+        f"| Errored cases (recorded, not retried) | {config_a['error_count']} | {config_b['error_count']} |",
         "",
         "## Caveats",
         "",

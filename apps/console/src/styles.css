@@ -322,14 +322,11 @@ body {
   border-radius: 6px;
   padding: 14px;
   min-height: 90px;
-  white-space: pre-wrap;
   font-size: 14px;
-  line-height: 1.5;
 }
 
 .answer.inline {
   min-height: 0;
-  margin-top: 6px;
 }
 
 .answer.pending {

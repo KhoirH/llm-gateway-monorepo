@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, getTrace, streamSupport, type FinalEvent, type MetaEvent, type RetrievedEntry, type Trace } from "../api";
+import Markdown from "react-markdown";
 
 interface Stats {
   intent: string | null;
@@ -153,7 +154,11 @@ export function SupportPlayground({ apiKey }: { apiKey: string }) {
               )}
               {turn.error && <div className="error">{turn.error}</div>}
               {turn.text ? (
-                <div className="answer inline">{turn.text}</div>
+                <div className="answer inline" style={{ padding: "0 14px" }}>
+                  <Markdown>
+                    {turn.text}
+                  </Markdown>
+                  </div>
               ) : (
                 turn.status === "pending" && <div className="answer inline pending">Retrieving & thinking...</div>
               )}

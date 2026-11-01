@@ -79,7 +79,7 @@ Pure function `route(input, cfg) -> { chain, steps }`, config-driven thresholds:
 2. **Tier selection** (support): top-1 similarity >= 0.80 and input under ~120 tokens -> `fast`, else `strong`. Rationale: easy, well-covered questions do not need the expensive model.
 3. **Fallback chain**: chosen backend, then the other real model. `chaos` tenant: mock first.
 
-Fallback triggers: 5xx, 429, connection error, no first token within 3000 ms, total timeout 20 s. Provider 4xx other than 429 fails fast (caller or config error). **Fallback only before the first token is written to the client.** A mid-stream break emits an `error` event with partial text and stores `partial_failure`. Delay `writeHead` until the first token so `x-model-used` and `x-fallback-fired` are correct. Each attempt writes a `routing_attempts` row; `GET /v1/requests/:id` returns the trace plus the `steps` from `route()`.
+Fallback triggers: 5xx, 429, connection error, any provider 4xx, no first token within 3000 ms, total timeout 20 s. At most `MAX_CONSECUTIVE_RETRIES` (3) consecutive failed attempts, cycling the fallback chain (fast -> strong -> fast ...); after that the chat is closed with the mapped error. Retry policy and error mapping live only in `src/retry.ts` (previously duplicated in both route files; 4xx used to fail fast). **Fallback only before the first token is written to the client.** A mid-stream break emits an `error` event with partial text and stores `partial_failure`. Delay `writeHead` until the first token so `x-model-used` and `x-fallback-fired` are correct. Each attempt writes a `routing_attempts` row; `GET /v1/requests/:id` returns the trace plus the `steps` from `route()`.
 
 One test per rule, one per fallback trigger, one for mid-stream failure.
 

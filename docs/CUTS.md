@@ -22,3 +22,4 @@ Deviations from AGENT.md made during the build (each approved by Hilmi in-sessio
 6. **`SUPPORT_PROMPT_VERSION` + `SUPPORT_MODEL_OVERRIDE` env** — added in B7 so Config A/B run as two gateway instances instead of prompt hacks.
 7. **Error code `internal` (500)** — not in the AGENT.md code list; used only for unexpected errors so the single error shape still holds.
 8. **Local Node 24** instead of 20 (`engines: >=20`).
+9. **All provider 4xx are now retried (was: fail-fast except 429)** — requested by Hilmi 2026-11-01: every backend failure joins the retry scope, capped at `MAX_CONSECUTIVE_RETRIES = 3` consecutive failed attempts (cycling the fallback chain, e.g. fast -> strong -> fast), then the chat is closed with the mapped error (4xx still maps to 400 `invalid_request`). Retry policy + error mapping centralised in `src/retry.ts`; previously duplicated in `routes/chat.ts` and `routes/support.ts`.

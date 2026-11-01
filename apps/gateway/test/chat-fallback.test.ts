@@ -187,19 +187,43 @@ describe("routing and fallback (B3)", () => {
     await app.close();
   });
 
-  it("fails fast on provider 4xx other than 429 (no fallback)", async (ctx) => {
+  it("falls back to the next backend when the primary returns a 4xx", async (ctx) => {
     if (!available) return ctx.skip();
     const before = await countAttempts(pool);
-    const shouldNotBeCalled = new MockAdapter({ chunkCount: 1 });
-    const { app, base } = await startServer({ fast: new HttpFailAdapter(401), strong: shouldNotBeCalled });
+    const ok = new MockAdapter({ chunkCount: 1, chunkText: "ok" });
+    const { app, base } = await startServer({ fast: new HttpFailAdapter(401), strong: ok });
+    const res = await post(base, key, { model: "fast", messages: [{ role: "user", content: "hi" }] });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-model-used")).toBe("strong");
+    expect(res.headers.get("x-fallback-fired")).toBe("true");
+    await waitForAttempts(pool, before + 2);
+    const rows = (await pool.query<Record<string, unknown>>("SELECT * FROM routing_attempts ORDER BY id DESC LIMIT 2")).rows;
+    expect(rows[1].backend).toBe("fast");
+    expect(rows[1].outcome).toBe("error");
+    expect(rows[0].backend).toBe("strong");
+    expect(rows[0].outcome).toBe("ok");
+    await app.close();
+  });
+
+  it("retries 4xx up to 3 consecutive attempts then closes the chat", async (ctx) => {
+    if (!available) return ctx.skip();
+    const before = await countAttempts(pool);
+    const { app, base } = await startServer({ fast: new HttpFailAdapter(401), strong: new HttpFailAdapter(401) });
     const res = await post(base, key, { model: "fast", messages: [{ role: "user", content: "hi" }] });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("invalid_request");
-    await waitForAttempts(pool, before + 1);
-    const rows = (await pool.query<Record<string, unknown>>("SELECT * FROM routing_attempts ORDER BY id DESC LIMIT 1")).rows;
-    expect(rows).toHaveLength(1);
-    expect(rows[0].backend).toBe("fast");
+    await waitForAttempts(pool, before + 3);
+    const rows = (await pool.query<Record<string, unknown>>("SELECT * FROM routing_attempts ORDER BY id DESC LIMIT 3")).rows;
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.backend)).toEqual(["fast", "strong", "fast"]);
+    expect(rows.map((r) => r.outcome)).toEqual(["error", "error", "error"]);
+    expect(rows.map((r) => r.reason)).toEqual(["retry", "fallback", "primary"]);
+    const reqRow = (
+      await pool.query<Record<string, unknown>>("SELECT outcome, fallback_fired FROM requests ORDER BY created_at DESC LIMIT 1")
+    ).rows[0];
+    expect(reqRow.outcome).toBe("error");
+    expect(reqRow.fallback_fired).toBe(true);
     await app.close();
   });
 

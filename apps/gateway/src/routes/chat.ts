@@ -2,13 +2,13 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { requireAuth } from "../auth/middleware.js";
-import { Errors, AppError } from "../errors.js";
+import { Errors } from "../errors.js";
 import { reserveTokens, reconcileQuota } from "../quota.js";
 import { writeRequestRow, writeRoutingAttempt, type Usage } from "../metering.js";
 import { AdapterError, type BackendAdapter, type ChatRequest } from "../adapters/types.js";
 import { route, type RouteStep } from "../routing/route.js";
+import { MAX_CONSECUTIVE_RETRIES, errorMessage, is4xxFailure, mapAdapterError, shouldRetry } from "../retry.js";
 import type { Env } from "../env.js";
-import type { ModelTier } from "../config/models.js";
 
 const chatBodySchema = z.object({
   model: z.string().min(1).optional(),
@@ -35,33 +35,6 @@ function estimatedUsage(body: ChatBody, outChars: number, tier: string, started:
     ttftMs: firstTokenAt !== null ? firstTokenAt - started : null,
     latencyMs: Date.now() - started,
   };
-}
-
-function mapAdapterError(err: unknown): { status: number; code: string; message: string } {
-  if (err instanceof AppError) {
-    return { status: err.status, code: err.code, message: err.message };
-  }
-  if (err instanceof AdapterError) {
-    if (err.kind === "timeout") {
-      return { status: 504, code: "timeout", message: "Upstream timed out" };
-    }
-    if (err.kind === "http") {
-      if (err.status !== undefined && err.status < 500 && err.status !== 429) {
-        return { status: 400, code: "invalid_request", message: err.message };
-      }
-      return { status: 502, code: "all_backends_failed", message: "Backend request failed" };
-    }
-    return { status: 502, code: "all_backends_failed", message: "Backend connection failed" };
-  }
-  return { status: 500, code: "internal", message: "Internal error" };
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Unknown error";
-}
-
-function isFailFast(err: unknown): boolean {
-  return err instanceof AdapterError && err.kind === "http" && err.status !== undefined && err.status < 500 && err.status !== 429;
 }
 
 interface AttemptContext {
@@ -157,8 +130,10 @@ export function chatRoutes(app: FastifyInstance, pool: Pool, adapters: Record<st
       raw.end(JSON.stringify({ error: { code: mapped.code, message: mapped.message, request_id: req.id } }));
     };
 
-    for (let i = 0; i < chain.length; i++) {
-      const tier = chain[i];
+    const maxAttempts = Math.max(chain.length, MAX_CONSECUTIVE_RETRIES);
+    let consecutiveFailures = 0;
+    for (let i = 0; i < maxAttempts; i++) {
+      const tier = chain[i % chain.length];
       const adapter = adapters[tier];
       const fallbackFired = i > 0;
       attemptsMade = i + 1;
@@ -179,7 +154,7 @@ export function chatRoutes(app: FastifyInstance, pool: Pool, adapters: Record<st
         bufferedAttempts.push({
           attempt: i + 1,
           backend: tier,
-          reason: fallbackFired ? "fallback" : "primary",
+          reason: i >= chain.length ? "retry" : fallbackFired ? "fallback" : "primary",
           outcome,
           latencyMs: Date.now() - attemptStart,
           error: err instanceof Error ? err.message : null,
@@ -285,11 +260,14 @@ export function chatRoutes(app: FastifyInstance, pool: Pool, adapters: Record<st
       } catch (err) {
         clearTimeout(ttftTimer);
         clientController.signal.removeEventListener("abort", onClientAbort);
+        consecutiveFailures += 1;
         req.log.warn(
           {
             attempt: i + 1,
             backend: tier,
             kind: err instanceof AdapterError ? err.kind : "unknown",
+            is_4xx: is4xxFailure(err),
+            consecutive_failures: consecutiveFailures,
             message: errorMessage(err),
             ttft_fired: ttftFired,
             total_timed_out: totalTimedOut,
@@ -308,13 +286,7 @@ export function chatRoutes(app: FastifyInstance, pool: Pool, adapters: Record<st
           } catch {}
           break;
         }
-        if (isFailFast(err)) {
-          outcome = "error";
-          attemptError("error", err);
-          sendJsonError(mapAdapterError(err));
-          break;
-        }
-        if (totalTimedOut || clientGone || i === chain.length - 1) {
+        if (totalTimedOut || clientGone) {
           outcome = "error";
           attemptError("error", err);
           sendJsonError(totalTimedOut ? { status: 504, code: "timeout", message: "Upstream timed out" } : mapAdapterError(err));
@@ -322,6 +294,10 @@ export function chatRoutes(app: FastifyInstance, pool: Pool, adapters: Record<st
         }
         outcome = "error";
         attemptError("error", err);
+        if (!shouldRetry(err, consecutiveFailures)) {
+          sendJsonError(mapAdapterError(err));
+          break;
+        }
       } finally {
         clearTimeout(ttftTimer);
         clientController.signal.removeEventListener("abort", onClientAbort);

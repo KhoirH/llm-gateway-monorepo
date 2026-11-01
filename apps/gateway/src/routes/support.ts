@@ -8,6 +8,7 @@ import { writeRequestRow, writeRoutingAttempt, type Usage } from "../metering.js
 import { retrieve, type RetrievedEntry } from "../retrieval.js";
 import { AdapterError, type BackendAdapter, type ChatRequest } from "../adapters/types.js";
 import { route, type RouteStep } from "../routing/route.js";
+import { MAX_CONSECUTIVE_RETRIES, errorMessage, is4xxFailure, mapAdapterError, shouldRetry } from "../retry.js";
 import { estimateCost, type ModelTier } from "../config/models.js";
 import { ChunkParser } from "../support/parser.js";
 import { computeConfidence } from "../support/confidence.js";
@@ -28,33 +29,6 @@ const supportBodySchema = z.object({
 
 function buildFullPrompt(message: string, entries: RetrievedEntry[], repair: boolean, promptVersion: "v1" | "v2"): string {
   return repair ? buildPrompt(message, entries, promptVersion) + buildRepairSuffix() : buildPrompt(message, entries, promptVersion);
-}
-
-function mapAdapterError(err: unknown): { status: number; code: string; message: string } {
-  if (err instanceof AppError) {
-    return { status: err.status, code: err.code, message: err.message };
-  }
-  if (err instanceof AdapterError) {
-    if (err.kind === "timeout") {
-      return { status: 504, code: "timeout", message: "Upstream timed out" };
-    }
-    if (err.kind === "http") {
-      if (err.status !== undefined && err.status < 500 && err.status !== 429) {
-        return { status: 400, code: "invalid_request", message: err.message };
-      }
-      return { status: 502, code: "all_backends_failed", message: "Backend request failed" };
-    }
-    return { status: 502, code: "all_backends_failed", message: "Backend connection failed" };
-  }
-  return { status: 500, code: "internal", message: "Internal error" };
-}
-
-function isFailFast(err: unknown): boolean {
-  return err instanceof AdapterError && err.kind === "http" && err.status !== undefined && err.status < 500 && err.status !== 429;
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Unknown error";
 }
 
 interface AttemptRow {
@@ -207,8 +181,10 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
       raw.end();
     };
 
-    attemptLoop: for (let i = 0; i < chain.length; i++) {
-      const tier = chain[i];
+    const maxAttempts = Math.max(chain.length, MAX_CONSECUTIVE_RETRIES);
+    let consecutiveFailures = 0;
+    attemptLoop: for (let i = 0; i < maxAttempts; i++) {
+      const tier = chain[i % chain.length];
       const adapter = adapters[tier];
       const fallbackFired = i > 0;
       attemptsMade = i + 1;
@@ -229,7 +205,7 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
         bufferedAttempts.push({
           attempt: i + 1,
           backend: tier,
-          reason: fallbackFired ? "fallback" : repair ? "repair" : "primary",
+          reason: i >= chain.length ? "retry" : fallbackFired ? "fallback" : repair ? "repair" : "primary",
           outcome: rowOutcome,
           latencyMs: Date.now() - attemptStart,
           error: err instanceof Error ? err.message : null,
@@ -342,11 +318,14 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
       } catch (err) {
         clearTimeout(ttftTimer);
         clientController.signal.removeEventListener("abort", onClientAbort);
+        consecutiveFailures += 1;
         req.log.warn(
           {
             attempt: i + 1,
             backend: tier,
             kind: err instanceof AdapterError ? err.kind : "unknown",
+            is_4xx: is4xxFailure(err),
+            consecutive_failures: consecutiveFailures,
             message: errorMessage(err),
             ttft_fired: ttftFired,
             total_timed_out: totalTimedOut,
@@ -361,13 +340,7 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
           sendSseError(mapped.code, errorMessage(err), true);
           break attemptLoop;
         }
-        if (isFailFast(err)) {
-          outcome = "error";
-          attemptError("error", err);
-          sendJsonError(mapAdapterError(err));
-          break attemptLoop;
-        }
-        if (totalTimedOut || clientGone || i === chain.length - 1) {
+        if (totalTimedOut || clientGone) {
           outcome = "error";
           attemptError("error", err);
           sendJsonError(totalTimedOut ? { status: 504, code: "timeout", message: "Upstream timed out" } : mapAdapterError(err));
@@ -375,6 +348,10 @@ export function supportRoutes(app: FastifyInstance, pool: Pool, adapters: Record
         }
         outcome = "error";
         attemptError("error", err);
+        if (!shouldRetry(err, consecutiveFailures)) {
+          sendJsonError(mapAdapterError(err));
+          break attemptLoop;
+        }
         continue attemptLoop;
       } finally {
         clearTimeout(ttftTimer);

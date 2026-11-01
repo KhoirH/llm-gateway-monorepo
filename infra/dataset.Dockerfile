@@ -1,5 +1,5 @@
 FROM python:3.12-slim
 RUN pip install --no-cache-dir duckdb
 WORKDIR /app
-COPY apps/gateway/scripts/dataset.py /app/dataset.py
+COPY scripts/dataset.py /app/dataset.py
 ENTRYPOINT ["python", "/app/dataset.py", "/data"]

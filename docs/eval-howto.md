@@ -11,7 +11,7 @@ Every command below was executed successfully on 2026-11-01 against the current 
 | Model (current env) | `gemini-3.1-flash-lite` via `api.anoman.io` | `llama-3-1-8b-instruct` via `api.anoman.io` |
 | Wiring | `gateway-a`: `SUPPORT_PROMPT_VERSION=v1` + `SUPPORT_MODEL_OVERRIDE=fast` | `gateway-b`: `v2` + `strong` |
 
-Both gateways serve the same held-out set from `data/heldout.json` (25 in-scope + 5 out-of-scope, zero overlap with the 600-entry KB, asserted by test). Harness: `apps/gateway/scripts/run_eval.py` (Docker image `eval`), throttled 1.5 s/request, sequential A then B.
+Both gateways serve the same held-out set from `data/heldout.json` (25 in-scope + 5 out-of-scope, zero overlap with the 600-entry KB, asserted by test). Harness: `scripts/run_eval.py` (Docker image `eval`), throttled 1.5 s/request, sequential A then B.
 
 ## 1. Verify providers first — stop if this fails
 

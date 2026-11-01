@@ -42,8 +42,21 @@ export interface RouteStep {
   detail: string;
 }
 
+export interface TraceRequest {
+  outcome: string;
+  model_used: string | null;
+  fallback_fired: boolean;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  usage_estimated: boolean;
+  latency_ms: number | null;
+  ttft_ms: number | null;
+  estimated_cost: number | null;
+  route_steps: RouteStep[];
+}
+
 export interface Trace {
-  request: Record<string, unknown> & { outcome: string; model_used: string | null; route_steps: RouteStep[] };
+  request: TraceRequest & Record<string, unknown>;
   routing_attempts: RoutingAttempt[];
 }
 
@@ -118,33 +131,38 @@ export async function streamSupport(
   }
 }
 
-export interface ChatUsageChunk {
-  id: string;
-  object: string;
-  model: string;
-  choices: { index: number; delta: { content?: string; reasoning_content?: string }; finish_reason: string | null }[];
-  usage?: { prompt_tokens: number; completion_tokens: number; usage_estimated: boolean };
+export interface ChatMessage {
+  role: string;
+  content: string;
 }
 
-export async function streamChat(
-  apiKey: string,
-  messages: { role: string; content: string }[],
-  onDelta: (text: string) => void,
-  onUsage: (usage: { input_tokens: number; output_tokens: number; usage_estimated: boolean }) => void,
-  onRequestMeta: (requestId: string, model: string, fallbackFired: boolean) => void,
-): Promise<void> {
+export interface ChatUsageSummary {
+  input_tokens: number;
+  output_tokens: number;
+  usage_estimated: boolean;
+}
+
+export interface ChatStreamHandlers {
+  onDelta: (text: string) => void;
+  onReasoning?: (text: string) => void;
+  onUsage?: (usage: ChatUsageSummary) => void;
+  onRequestMeta?: (requestId: string, model: string, fallbackFired: boolean) => void;
+}
+
+export async function streamChat(apiKey: string, messages: ChatMessage[], handlers: ChatStreamHandlers, signal?: AbortSignal): Promise<void> {
   const res = await fetch("/v1/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ messages, stream: true }),
+    signal,
   });
-  const requestId = res.headers.get("x-request-id");
+  const requestId = res.headers.get("x-request-id") ?? "";
   const modelUsed = res.headers.get("x-model-used");
   const fallbackFired = res.headers.get("x-fallback-fired") === "true";
   if (!res.ok || !res.body) {
     throw await errorFrom(res);
   }
-  if (requestId) onRequestMeta(requestId, modelUsed ?? "?", fallbackFired);
+  handlers.onRequestMeta?.(requestId, modelUsed ?? "?", fallbackFired);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
@@ -159,19 +177,24 @@ export async function streamChat(
       for (const line of block.split("\n")) {
         if (!line.startsWith("data:")) continue;
         const data = line.slice(5).trim();
-        let parsed: ChatUsageChunk;
+        if (!data) continue;
+        let chunk: {
+          choices?: { delta?: { content?: string; reasoning_content?: string } }[];
+          usage?: { prompt_tokens: number; completion_tokens: number; usage_estimated: boolean };
+        };
         try {
-          parsed = JSON.parse(data) as ChatUsageChunk;
+          chunk = JSON.parse(data);
         } catch {
           continue;
         }
-        const content = parsed.choices?.[0]?.delta?.content;
-        if (content) onDelta(content);
-        if (parsed.usage) {
-          onUsage({
-            input_tokens: parsed.usage.prompt_tokens,
-            output_tokens: parsed.usage.completion_tokens,
-            usage_estimated: parsed.usage.usage_estimated,
+        const delta = chunk.choices?.[0]?.delta;
+        if (delta?.reasoning_content) handlers.onReasoning?.(delta.reasoning_content);
+        if (delta?.content) handlers.onDelta(delta.content);
+        if (chunk.usage) {
+          handlers.onUsage?.({
+            input_tokens: chunk.usage.prompt_tokens,
+            output_tokens: chunk.usage.completion_tokens,
+            usage_estimated: chunk.usage.usage_estimated,
           });
         }
       }

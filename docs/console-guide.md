@@ -1,6 +1,11 @@
 # Console Guide — how to run, use, and troubleshoot
 
-The playground is a **continuous chat**: every turn (question + streaming answer) stays in the transcript with its own badges, stats and decision trail; retrieval entries and the trail are collapsible per turn. "Clear" resets the session view (server-side each request is still stateless — retrieval runs per message).
+The **Playground** tab has two sub-tabs:
+
+- **Chat Completions** — raw multi-turn demo of `POST /v1/chat/completions` (stream): optional system prompt, session history replayed per request, Stop button (client abort), and per turn: model/fallback badges, tokens, TTFT, latency, estimated cost and the decision trail (from `GET /v1/requests/:id` after the stream ends).
+- **Support (KB)** — the retrieval-grounded capability demo described below.
+
+The support playground is a **continuous chat**: every turn (question + streaming answer) stays in the transcript with its own badges, stats and decision trail; retrieval entries and the trail are collapsible per turn. "Clear" resets the session view (server-side each request is still stateless — retrieval runs per message).
 
 ## 1. Prerequisites (once)
 

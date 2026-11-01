@@ -85,6 +85,27 @@ body {
   border-color: #3f5a91;
 }
 
+.subtabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.subtabs button {
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  color: #e6e8ee;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.subtabs button.active {
+  background: #24314f;
+  border-color: #3f5a91;
+}
+
 .chat {
   display: flex;
   flex-direction: column;
@@ -190,6 +211,61 @@ body {
 .composer button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.composer button.stop {
+  background: #8a2f2f;
+}
+
+.system-prompt {
+  margin-top: 10px;
+  background: #171a23;
+  border: 1px solid #2a2f3d;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.system-prompt summary {
+  cursor: pointer;
+  color: #8b93a7;
+  font-size: 12px;
+  user-select: none;
+}
+
+.system-prompt textarea {
+  width: 100%;
+  margin-top: 8px;
+  background: #0f1117;
+  border: 1px solid #2a2f3d;
+  color: #e6e8ee;
+  padding: 10px;
+  border-radius: 6px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.stopped {
+  background: #1d2740;
+  color: #9ec1ff;
+  border: 1px solid #3f5a91;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.reasoning {
+  background: #0f1117;
+  border: 1px dashed #2a2f3d;
+  color: #9aa2b5;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow-y: auto;
 }
 
 .badges {
